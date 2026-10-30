@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>文章关键词与核心句 · 文本分析报告</title>
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #f8faff;
+    --text: #182230;
+    --muted: #68758a;
+    --line: #e4eaf2;
+    --accent: #315fe0;
+    --accent-soft: #edf2ff;
+    --shadow: 0 16px 40px rgba(28, 48, 88, 0.08);
+    --radius: 20px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background:
+      radial-gradient(1100px 540px at 8% -8%, #e4ecff 0%, rgba(228, 236, 255, 0) 60%),
+      radial-gradient(900px 500px at 100% 0%, #e7fbf7 0%, rgba(231, 251, 247, 0) 55%),
+      var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+      "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; }
+  button { color: inherit; }
+  .page {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 48px 0 72px;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 13px;
+    border: 1px solid #d8e3f7;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    color: #3d5e9e;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #36b78b;
+    box-shadow: 0 0 0 4px rgba(54, 183, 139, 0.13);
+  }
+  h1 {
+    max-width: 860px;
+    margin: 18px 0 12px;
+    font-size: clamp(30px, 4.6vw, 50px);
+    line-height: 1.14;
+    letter-spacing: -0.035em;
+    font-weight: 760;
+  }
+  .subtitle {
+    max-width: 760px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 16px;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px 20px;
+    margin-top: 20px;
+    color: #7a8799;
+    font-size: 13px;
+  }
+  .meta span { display: inline-flex; align-items: center; gap: 7px; }
+  .meta span::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #b6c2d6;
+  }
+  .panel {
+    position: sticky;
+    top: 14px;
+    z-index: 20;
+    margin: 30px 0 26px;
+    padding: 16px;
+    border: 1px solid rgba(222, 231, 243, 0.92);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .search-row { display: flex; gap: 10px; }
+  .search-box { position: relative; flex: 1; min-width: 0; }
+  .search-icon {
+    position: absolute;
+    top: 50%;
+    left: 17px;
+    width: 19px;
+    height: 19px;
+    transform: translateY(-50%);
+    color: #7f8ea4;
+    pointer-events: none;
+  }
+  #search {
+    width: 100%;
+    height: 52px;
+    padding: 0 48px 0 47px;
+    border: 1px solid #dce5f1;
+    border-radius: 13px;
+    outline: none;
+    background: #fbfdff;
+    color: var(--text);
+    font-size: 15px;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+  }
+  #search::placeholder { color: #98a5b7; }
+  #search:focus {
+    border-color: #8ca9ee;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(49, 95, 224, 0.11);
+  }
+  .clear-search {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    transform: translateY(-50%);
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #7f8da2;
+    font-size: 21px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .clear-search:hover { background: #eef3fa; color: #31415a; }
+  .clear-search[hidden] { display: none; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 11px;
+    padding: 0 2px;
+  }
+  #status {
+    color: #53627a;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .restore {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    border: 1px solid #cedbf2;
+    border-radius: 10px;
+    background: #fff;
+    color: #3156a6;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, transform 0.18s;
+  }
+  .restore:hover { background: var(--accent-soft); border-color: #aabfeb; }
+  .restore:active { transform: translateY(1px); }
+  .restore:disabled {
+    cursor: default;
+    opacity: 0.45;
+    background: #f7f9fc;
+  }
+  .blocked-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-top: 11px;
+    padding-top: 11px;
+    border-top: 1px dashed #e1e8f2;
+  }
+  .blocked-bar[hidden] { display: none; }
+  .blocked-label { color: #68758a; font-size: 12px; font-weight: 700; }
+  .blocked-list { display: flex; flex-wrap: wrap; gap: 7px; }
+  .blocked-chip {
+    padding: 5px 10px;
+    border: 1px solid #f0d4d8;
+    border-radius: 999px;
+    background: #fff5f6;
+    color: #a23a49;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .blocked-chip:hover { background: #ffe9ec; border-color: #e9b8c0; }
+  .build-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-top: 10px;
+    color: #7a8799;
+    font-size: 12px;
+  }
+  .build-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #b8c6da;
+  }
+  .build-hint { color: #99a5b5; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    overflow: hidden;
+    border: 1px solid #e4eaf3;
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 8px 26px rgba(31, 50, 85, 0.05);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #5d82ef, #49bfa3 55%, #f2b64f);
+    opacity: 0.82;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: #d4dfef;
+    box-shadow: 0 17px 38px rgba(31, 50, 85, 0.09);
+  }
+  .card[hidden] { display: none !important; }
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 11px;
+  }
+  .card-no {
+    color: #a3b0c3;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    font-variant-numeric: tabular-nums;
+  }
+  .word-count {
+    padding: 4px 9px;
+    border: 1px solid #e5ebf4;
+    border-radius: 999px;
+    background: #f8fafd;
+    color: #6f7d91;
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .card-title {
+    margin: 0 0 6px;
+    font-size: 21px;
+    line-height: 1.42;
+    letter-spacing: -0.015em;
+    font-weight: 750;
+  }
+  .filename {
+    margin: 0;
+    color: #99a5b6;
+    font-size: 11.5px;
+    word-break: break-all;
+  }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 19px 0 9px;
+    color: #40506a;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+  .section-note {
+    color: #a3afbf;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+  .tags { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tag {
+    padding: 6px 11px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: transform 0.16s, filter 0.16s, box-shadow 0.16s;
+  }
+  .tag:hover {
+    transform: translateY(-1px);
+    filter: saturate(1.15);
+    box-shadow: 0 4px 10px rgba(31, 50, 85, 0.08);
+  }
+  .tag:focus-visible {
+    outline: 3px solid rgba(49, 95, 224, 0.25);
+    outline-offset: 2px;
+  }
+  .tag-0 { background: #eaf1ff; border-color: #d6e3ff; color: #2855bd; }
+  .tag-1 { background: #e8f8f2; border-color: #d0efe4; color: #14765c; }
+  .tag-2 { background: #fff7e4; border-color: #f6e7bf; color: #8a6414; }
+  .tag-3 { background: #fff0f2; border-color: #f5d9dd; color: #a23e4d; }
+  .tag-4 { background: #f2efff; border-color: #e2dcfb; color: #5b44a9; }
+  .tag-5 { background: #e9f7fb; border-color: #d0ebf2; color: #14687b; }
+  .core-list { display: grid; gap: 9px; }
+  .core-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 13px;
+    border: 1px solid #f3e7c6;
+    border-radius: 12px;
+    background: #fffdf5;
+  }
+  .core-index {
+    flex: 0 0 auto;
+    padding-top: 2px;
+    color: #c29a3b;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .core-text {
+    margin: 0;
+    color: #4d4636;
+    font-size: 14px;
+    line-height: 1.85;
+  }
+  mark {
+    padding: 0 2px;
+    color: inherit;
+    background: linear-gradient(transparent 54%, #ffe389 54%);
+  }
+  .fulltext {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e9f2;
+  }
+  .fulltext summary {
+    width: fit-content;
+    color: #65748a;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+  .fulltext summary::-webkit-details-marker { display: none; }
+  .fulltext summary::before {
+    content: "＋";
+    display: inline-block;
+    margin-right: 6px;
+    color: #8da0bc;
+    font-weight: 700;
+    transition: transform 0.18s;
+  }
+  .fulltext[open] summary::before { content: "－"; }
+  .fulltext-body {
+    margin-top: 10px;
+    padding: 13px 15px;
+    border-radius: 12px;
+    background: #f8fafd;
+  }
+  .fulltext-body p {
+    margin: 0 0 10px;
+    color: #536176;
+    font-size: 13.5px;
+    line-height: 1.9;
+  }
+  .fulltext-body p:last-child { margin-bottom: 0; }
+  .empty {
+    padding: 64px 20px;
+    border: 1px dashed #cfdaea;
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.6);
+    text-align: center;
+  }
+  .empty[hidden] { display: none; }
+  .empty-icon {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 15px;
+    border-radius: 50%;
+    background: #edf2fa;
+    color: #7e90aa;
+    font-size: 25px;
+  }
+  .empty h2 { margin: 0 0 7px; font-size: 18px; }
+  .empty p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 20px;
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px solid #dfe7f1;
+    color: #8b98ab;
+    font-size: 12px;
+  }
+  .muted { color: #98a4b5; font-size: 13px; }
+  @media (max-width: 840px) {
+    .page { width: min(100% - 28px, 720px); padding-top: 32px; }
+    .grid { grid-template-columns: 1fr; }
+    .panel { position: static; }
+    .card-title { font-size: 19px; }
+  }
+  @media (max-width: 520px) {
+    .page { width: min(100% - 22px, 520px); padding: 24px 0 48px; }
+    .panel { padding: 12px; border-radius: 15px; }
+    .search-row { gap: 0; }
+    #search { height: 48px; font-size: 14px; }
+    .toolbar { align-items: flex-start; }
+    .card { padding: 18px; border-radius: 16px; }
+    .card-title { font-size: 18px; }
+    .meta { font-size: 12px; }
+    .footer { display: block; line-height: 1.9; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      transition: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="eyebrow">TEXT INSIGHT · 文本分析报告</div>
+      <h1>文章关键词与核心句</h1>
+      <p class="subtitle">基于 jieba 分词与 TF-IDF 权重，从每篇中文文章中提取 5 个关键词和 2 句核心句。点击关键词可屏蔽包含该词的文章，搜索框支持实时过滤。</p>
+      <div class="meta">
+        <span>共 <strong>5</strong> 篇</span>
+        <span>来源：library</span>
+        <span>生成于 2026-10-23 22:36</span>
+      </div>
+    </header>
+
+    <section class="panel" aria-label="报告筛选">
+      <div class="search-row">
+        <label class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"></circle>
+            <path d="M16 16L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+          </svg>
+          <input id="search" type="search" autocomplete="off" spellcheck="false"
+            placeholder="搜索标题、正文或关键词…" aria-label="搜索文章">
+          <button type="button" id="clearSearch" class="clear-search" hidden
+            aria-label="清空搜索">×</button>
+        </label>
+      </div>
+      <div class="toolbar">
+        <div id="status" role="status" aria-live="polite">显示 5 / 5 篇</div>
+        <button type="button" id="restoreAll" class="restore">恢复全部</button>
+      </div>
+      <div id="blockedBar" class="blocked-bar" hidden>
+        <span class="blocked-label">屏蔽中：</span>
+        <span id="blockedList" class="blocked-list"></span>
+      </div>
+      <div class="build-info"><span class="build-dot"></span>构建筛选：无，展示文件夹内全部文章</div>
+    </section>
+
+    <main id="grid" class="grid" aria-label="文章列表">
+
+    <article class="card" data-search="人工智能正在如何改变内容生产 ================================
+
+一、从&quot;工具&quot;到&quot;合作者&quot;
+
+过去二十年里，内容生产工具的演进基本沿着&quot;降低操作成本&quot;这条线走：从纸笔到打字机，从打字机到文字处理软件，从本机软件到在线协作平台。每一次变化都让&quot;动手&quot;更容易，但决定写什么的仍然是人。
+
+生成式人工智能带来的变化不太一样。它不只是让打字更快，而是把一部分&quot;构思&quot;也接了过去。当你输入一句模糊的要求，它给出的草稿可能并不好，却常常能提供一个可以反驳的起点。这种&quot;先有一个东西可改&quot;的状态，反而降低了开始写作的心理门槛。
+
+于是出现了一种新的分工：人负责判断、取舍和承担责任，模型负责铺开可能性、处理重复劳动、提供结构化的第一版。这种关系更像编辑与实习作者，而不是主人与工具。
+
+二、效率提升在哪里
+
+在实际的内容生产流程里，人工智能最明显的贡献集中在三类工作上。
+
+第一类是&quot;有明确格式但没有现成模板&quot;的任务。比如把一份会议记录整理成结构化的纪要，或者把一堆产品参数改写成面向普通读者的说明。这类任务的难点在于组织信息，而不是创造信息，模型恰好擅长。
+
+第二类是&quot;需要脑力但不需要署名&quot;的重复劳动。校对、术语统一、标题的多版本尝试、长文的分段与摘要，这些工作过去消耗大量时间，现在可以在一两分钟内得到初稿。
+
+第三类是&quot;跨语言与跨领域&quot;。让一个不熟悉某行业的人快速理解一份技术文档，或者把中文材料整理成英文提纲，模型能显著压缩&quot;进入一个陌生领域&quot;的前期成本。
+
+三、效率之外的问题
+
+但效率很容易掩盖另外一些变化。
+
+首先是内容同质化。当大量作者使用相似的模型、相似的提示词、相似的输出结构，文本的&quot;平均面貌&quot;会趋同。读者未必能指出哪里不对,却会觉得&quot;似曾相识&quot;。对媒体和品牌来说，这直接影响辨识度。
+
+其次是事实性的风险。模型会用非常流畅的语气说出不准确的信息，而且错误往往藏在细节里：一个年份、一个人名、一个数字的量级。对严肃内容来说，这意味着人工核查不能省，甚至要比以前更细。
+
+第三是责任归属。文章署名是人，错误却可能是模型引入的。一旦出了问题，&quot;是AI写的&quot;不能成为免责理由。这要求内容团队在流程上明确：谁对事实负责，谁对最终文本负责。
+
+四、写作本身会不会被削弱
+
+有一种担忧是：如果初稿随手可得，人的写作能力会不会退化。
+
+这个问题没有确定的答案，但可以参照历史。计算器普及之后，人们的心算能力确实下降了，但需要精确计算的场景反而变多了；搜索引擎普及之后，记忆细节的需求下降了,但提出好问题的能力变得更重要。技术往往不是削弱能力，而是把能力的要求转移到另一个环节。
+
+具体到写作，转移的方向大致是从&quot;把字写出来&quot;转向&quot;判断什么值得写&quot;。结构是否成立、论据是否支撑观点、语气是否匹配读者，这些判断无法外包。模型可以生成十种开头，但决定哪一种值得留下的仍然是人。
+
+五、比较现实的做法
+
+对个人写作者来说，一个相对稳妥的原则是：让模型做&quot;减法&quot;和&quot;铺路&quot;，自己做&quot;选择&quot;和&quot;收尾&quot;。
+
+可以用它来列提纲、找反例、检查逻辑跳跃、把冗长的段落压缩；但核心观点、关键事实、以及最后一遍通读，应该由自己完成。此外，把&quot;我为什么这样判断&quot;想清楚再动笔，仍然是最有效的抗同质化手段——模型可以模仿语气，却模仿不了具体的经验。
+
+对团队来说，更重要的可能是流程而非工具。把事实核查、来源标注、最终的编辑审读固定成步骤，比争论&quot;该不该用AI&quot;更有实际价值。
+
+六、结语
+
+内容生产的门槛正在下降，但内容的质量门槛并没有。当生成变得廉价，稀缺的东西会重新排序：一手信息、真实经验、明确立场、可靠的事实链条，这些反而更值钱。
+
+人工智能改变的也许不是&quot;人能写多好&quot;，而是&quot;什么人写的东西还值得读&quot;。这个问题，工具回答不了。 模型 事实 人工智能 判断 工具" aria-labelledby="card-title-1">
+      <div class="card-top">
+        <span class="card-no">01</span>
+        <span class="word-count">1505 字</span>
+      </div>
+      <h2 class="card-title" id="card-title-1">人工智能正在如何改变内容生产</h2>
+      <p class="filename">01_人工智能与内容生产.txt</p>
+
+      <div class="section-head">
+        <span>关键词</span><span class="section-note">TF-IDF TOP 5</span>
+      </div>
+      <div class="tags"><button type="button" class="tag tag-0" data-keyword="模型" title="TF-IDF 权重 0.152；点击屏蔽包含“模型”的文章" aria-label="屏蔽包含 模型 的文章">模型</button><button type="button" class="tag tag-1" data-keyword="事实" title="TF-IDF 权重 0.113；点击屏蔽包含“事实”的文章" aria-label="屏蔽包含 事实 的文章">事实</button><button type="button" class="tag tag-2" data-keyword="人工智能" title="TF-IDF 权重 0.113；点击屏蔽包含“人工智能”的文章" aria-label="屏蔽包含 人工智能 的文章">人工智能</button><button type="button" class="tag tag-3" data-keyword="判断" title="TF-IDF 权重 0.113；点击屏蔽包含“判断”的文章" aria-label="屏蔽包含 判断 的文章">判断</button><button type="button" class="tag tag-4" data-keyword="工具" title="TF-IDF 权重 0.113；点击屏蔽包含“工具”的文章" aria-label="屏蔽包含 工具 的文章">工具</button></div>
+
+      <div class="section-head">
+        <span>核心句</span><span class="section-note">抽取式 · 原文</span>
+      </div>
+      <div class="core-list"><div class="core-item"><span class="core-index">01</span><p class="core-text"><mark>过去二十年里，内容生产工具的演进基本沿着&quot;降低操作成本&quot;这条线走：从纸笔到打字机，从打字机到文字处理软件，从本机软件到在线协作平台。</mark></p></div><div class="core-item"><span class="core-index">02</span><p class="core-text"><mark>让一个不熟悉某行业的人快速理解一份技术文档，或者把中文材料整理成英文提纲，模型能显著压缩&quot;进入一个陌生领域&quot;的前期成本。</mark></p></div></div>
+
+      <details class="fulltext">
+        <summary>查看全文</summary>
+        <div class="fulltext-body"><p>================================</p><p>一、从&quot;工具&quot;到&quot;合作者&quot;</p><p>过去二十年里，内容生产工具的演进基本沿着&quot;降低操作成本&quot;这条线走：从纸笔到打字机，从打字机到文字处理软件，从本机软件到在线协作平台。每一次变化都让&quot;动手&quot;更容易，但决定写什么的仍然是人。</p><p>生成式人工智能带来的变化不太一样。它不只是让打字更快，而是把一部分&quot;构思&quot;也接了过去。当你输入一句模糊的要求，它给出的草稿可能并不好，却常常能提供一个可以反驳的起点。这种&quot;先有一个东西可改&quot;的状态，反而降低了开始写作的心理门槛。</p><p>于是出现了一种新的分工：人负责判断、取舍和承担责任，模型负责铺开可能性、处理重复劳动、提供结构化的第一版。这种关系更像编辑与实习作者，而不是主人与工具。</p><p>二、效率提升在哪里</p><p>在实际的内容生产流程里，人工智能最明显的贡献集中在三类工作上。</p><p>第一类是&quot;有明确格式但没有现成模板&quot;的任务。比如把一份会议记录整理成结构化的纪要，或者把一堆产品参数改写成面向普通读者的说明。这类任务的难点在于组织信息，而不是创造信息，模型恰好擅长。</p><p>第二类是&quot;需要脑力但不需要署名&quot;的重复劳动。校对、术语统一、标题的多版本尝试、长文的分段与摘要，这些工作过去消耗大量时间，现在可以在一两分钟内得到初稿。</p><p>第三类是&quot;跨语言与跨领域&quot;。让一个不熟悉某行业的人快速理解一份技术文档，或者把中文材料整理成英文提纲，模型能显著压缩&quot;进入一个陌生领域&quot;的前期成本。</p><p>三、效率之外的问题</p><p>但效率很容易掩盖另外一些变化。</p><p>首先是内容同质化。当大量作者使用相似的模型、相似的提示词、相似的输出结构，文本的&quot;平均面貌&quot;会趋同。读者未必能指出哪里不对,却会觉得&quot;似曾相识&quot;。对媒体和品牌来说，这直接影响辨识度。</p><p>其次是事实性的风险。模型会用非常流畅的语气说出不准确的信息，而且错误往往藏在细节里：一个年份、一个人名、一个数字的量级。对严肃内容来说，这意味着人工核查不能省，甚至要比以前更细。</p><p>第三是责任归属。文章署名是人，错误却可能是模型引入的。一旦出了问题，&quot;是AI写的&quot;不能成为免责理由。这要求内容团队在流程上明确：谁对事实负责，谁对最终文本负责。</p><p>四、写作本身会不会被削弱</p><p>有一种担忧是：如果初稿随手可得，人的写作能力会不会退化。</p><p>这个问题没有确定的答案，但可以参照历史。计算器普及之后，人们的心算能力确实下降了，但需要精确计算的场景反而变多了；搜索引擎普及之后，记忆细节的需求下降了,但提出好问题的能力变得更重要。技术往往不是削弱能力，而是把能力的要求转移到另一个环节。</p><p>具体到写作，转移的方向大致是从&quot;把字写出来&quot;转向&quot;判断什么值得写&quot;。结构是否成立、论据是否支撑观点、语气是否匹配读者，这些判断无法外包。模型可以生成十种开头，但决定哪一种值得留下的仍然是人。</p><p>五、比较现实的做法</p><p>对个人写作者来说，一个相对稳妥的原则是：让模型做&quot;减法&quot;和&quot;铺路&quot;，自己做&quot;选择&quot;和&quot;收尾&quot;。</p><p>可以用它来列提纲、找反例、检查逻辑跳跃、把冗长的段落压缩；但核心观点、关键事实、以及最后一遍通读，应该由自己完成。此外，把&quot;我为什么这样判断&quot;想清楚再动笔，仍然是最有效的抗同质化手段——模型可以模仿语气，却模仿不了具体的经验。</p><p>对团队来说，更重要的可能是流程而非工具。把事实核查、来源标注、最终的编辑审读固定成步骤，比争论&quot;该不该用AI&quot;更有实际价值。</p><p>六、结语</p><p>内容生产的门槛正在下降，但内容的质量门槛并没有。当生成变得廉价，稀缺的东西会重新排序：一手信息、真实经验、明确立场、可靠的事实链条，这些反而更值钱。</p><p>人工智能改变的也许不是&quot;人能写多好&quot;，而是&quot;什么人写的东西还值得读&quot;。这个问题，工具回答不了。</p></div>
+      </details>
+    </article>
+    
+    <article class="card" data-search="城市里的鸟，为什么越来越不怕人 如果你在公园长椅上吃过面包，大概见过这样的场面：一只灰喜鹊落在两米外，歪着头看你，等你掉下一块渣。你稍微动一下，它后退半步，但并不飞走。
+
+几十年前，同样品种的鸟见到人往往会直接起飞。这种变化不是错觉，它在很多城市都被记录过，而且有一个专门的词来描述——&quot;城市化带来的行为改变&quot;。
+
+一、胆子是学出来的
+
+鸟类对人的容忍度，很大程度上是学习的结果。城市里活的鸟，祖辈可能就生活在城市，它们从小接触的是行人、自行车、狗和外卖箱，而不是猎枪和猛禽。对它们来说，人是一种&quot;移动缓慢、声音很大、但通常不构成直接威胁&quot;的东西。
+
+这种学习会在种群内部传递。研究发现，城市鸟群对人的&quot;警戒距离&quot;普遍短于郊区同类，而且这种差异在幼鸟身上也能观察到——它们并不是自己一次次试验出来的，而是通过观察成鸟的反应学会了&quot;这个人不用跑&quot;。
+
+二、食物结构变了
+
+城市提供了大量高热量、易获得、可预测的食物：落果、垃圾、投喂、餐馆后厨。当食物来源稳定且集中，动物就没有必要维持大范围的警惕。警戒是有成本的——逃跑消耗能量，也意味着放弃眼前的食物。
+
+换句话说，不怕人不完全是&quot;进化出了勇气&quot;，而是&quot;算了一笔账&quot;。当风险被反复证明很低，收益又很明确，警惕就会下降。
+
+三、城市筛选了性格
+
+还有一个更深的机制：城市可能在筛选鸟的性格。
+
+胆子大、探索性强、对新事物反应弱的个体，更容易在城里找到食物和巢址，也更容易繁殖。久而久之，城市种群的&quot;平均性格&quot;会向大胆一端偏移。这类研究在多种鸟类上都有报道，说明它并非个别现象。
+
+这个过程有时被称作&quot;自我驯化&quot;的一种表现——和狗从狼演变过来的逻辑有相似之处：对人类不那么恐惧的个体获得了更多机会。
+
+四、代价也存在
+
+不怕人并不总是好事。
+
+一方面，警戒距离缩短意味着更容易被车撞、被猫捕食、被恶意伤害。城市鸟类的死亡率中，撞击和捕食占了相当比例。
+
+另一方面，依赖人类食物会带来营养问题和疾病传播风险。面包对水鸟来说几乎等于空热量，长期投喂还会导致水质恶化和种群过度集中。
+
+五、普通人能做什么
+
+如果想和城市鸟类相处得更好，有几条简单的原则：
+
+不要投喂加工食品，尤其是面包、饼干和含盐食物。如果确实想投喂，选择接近其自然食谱的东西，并控制量。
+
+保持距离。看起来&quot;它不怕我&quot;的时候,往往正是它压力最小的时候，但这不代表可以靠近到能摸到的程度。繁殖期尤其要保持距离，惊飞亲鸟可能导致弃巢。
+
+给它们留一点野性空间。窗台、树洞、灌木丛、少修剪的绿地，比精致整齐的景观更有价值。
+
+最后一点也许最重要：不要把&quot;不怕人&quot;当成亲近。那是一种适应，不是信任。 城市 食物 不怕 距离 鸟类" aria-labelledby="card-title-2">
+      <div class="card-top">
+        <span class="card-no">02</span>
+        <span class="word-count">1042 字</span>
+      </div>
+      <h2 class="card-title" id="card-title-2">城市里的鸟，为什么越来越不怕人</h2>
+      <p class="filename">02_城市鸟类为什么越来越大胆.txt</p>
+
+      <div class="section-head">
+        <span>关键词</span><span class="section-note">TF-IDF TOP 5</span>
+      </div>
+      <div class="tags"><button type="button" class="tag tag-0" data-keyword="城市" title="TF-IDF 权重 0.197；点击屏蔽包含“城市”的文章" aria-label="屏蔽包含 城市 的文章">城市</button><button type="button" class="tag tag-1" data-keyword="食物" title="TF-IDF 权重 0.171；点击屏蔽包含“食物”的文章" aria-label="屏蔽包含 食物 的文章">食物</button><button type="button" class="tag tag-2" data-keyword="不怕" title="TF-IDF 权重 0.151；点击屏蔽包含“不怕”的文章" aria-label="屏蔽包含 不怕 的文章">不怕</button><button type="button" class="tag tag-3" data-keyword="距离" title="TF-IDF 权重 0.138；点击屏蔽包含“距离”的文章" aria-label="屏蔽包含 距离 的文章">距离</button><button type="button" class="tag tag-4" data-keyword="鸟类" title="TF-IDF 权重 0.138；点击屏蔽包含“鸟类”的文章" aria-label="屏蔽包含 鸟类 的文章">鸟类</button></div>
+
+      <div class="section-head">
+        <span>核心句</span><span class="section-note">抽取式 · 原文</span>
+      </div>
+      <div class="core-list"><div class="core-item"><span class="core-index">01</span><p class="core-text"><mark>研究发现，城市鸟群对人的&quot;警戒距离&quot;普遍短于郊区同类，而且这种差异在幼鸟身上也能观察到——它们并不是自己一次次试验出来的，而是通过观察成鸟的反应学会了&quot;这个人不用跑&quot;。</mark></p></div><div class="core-item"><span class="core-index">02</span><p class="core-text"><mark>这个过程有时被称作&quot;自我驯化&quot;的一种表现——和狗从狼演变过来的逻辑有相似之处：对人类不那么恐惧的个体获得了更多机会。</mark></p></div></div>
+
+      <details class="fulltext">
+        <summary>查看全文</summary>
+        <div class="fulltext-body"><p>如果你在公园长椅上吃过面包，大概见过这样的场面：一只灰喜鹊落在两米外，歪着头看你，等你掉下一块渣。你稍微动一下，它后退半步，但并不飞走。</p><p>几十年前，同样品种的鸟见到人往往会直接起飞。这种变化不是错觉，它在很多城市都被记录过，而且有一个专门的词来描述——&quot;城市化带来的行为改变&quot;。</p><p>一、胆子是学出来的</p><p>鸟类对人的容忍度，很大程度上是学习的结果。城市里活的鸟，祖辈可能就生活在城市，它们从小接触的是行人、自行车、狗和外卖箱，而不是猎枪和猛禽。对它们来说，人是一种&quot;移动缓慢、声音很大、但通常不构成直接威胁&quot;的东西。</p><p>这种学习会在种群内部传递。研究发现，城市鸟群对人的&quot;警戒距离&quot;普遍短于郊区同类，而且这种差异在幼鸟身上也能观察到——它们并不是自己一次次试验出来的，而是通过观察成鸟的反应学会了&quot;这个人不用跑&quot;。</p><p>二、食物结构变了</p><p>城市提供了大量高热量、易获得、可预测的食物：落果、垃圾、投喂、餐馆后厨。当食物来源稳定且集中，动物就没有必要维持大范围的警惕。警戒是有成本的——逃跑消耗能量，也意味着放弃眼前的食物。</p><p>换句话说，不怕人不完全是&quot;进化出了勇气&quot;，而是&quot;算了一笔账&quot;。当风险被反复证明很低，收益又很明确，警惕就会下降。</p><p>三、城市筛选了性格</p><p>还有一个更深的机制：城市可能在筛选鸟的性格。</p><p>胆子大、探索性强、对新事物反应弱的个体，更容易在城里找到食物和巢址，也更容易繁殖。久而久之，城市种群的&quot;平均性格&quot;会向大胆一端偏移。这类研究在多种鸟类上都有报道，说明它并非个别现象。</p><p>这个过程有时被称作&quot;自我驯化&quot;的一种表现——和狗从狼演变过来的逻辑有相似之处：对人类不那么恐惧的个体获得了更多机会。</p><p>四、代价也存在</p><p>不怕人并不总是好事。</p><p>一方面，警戒距离缩短意味着更容易被车撞、被猫捕食、被恶意伤害。城市鸟类的死亡率中，撞击和捕食占了相当比例。</p><p>另一方面，依赖人类食物会带来营养问题和疾病传播风险。面包对水鸟来说几乎等于空热量，长期投喂还会导致水质恶化和种群过度集中。</p><p>五、普通人能做什么</p><p>如果想和城市鸟类相处得更好，有几条简单的原则：</p><p>不要投喂加工食品，尤其是面包、饼干和含盐食物。如果确实想投喂，选择接近其自然食谱的东西，并控制量。</p><p>保持距离。看起来&quot;它不怕我&quot;的时候,往往正是它压力最小的时候，但这不代表可以靠近到能摸到的程度。繁殖期尤其要保持距离，惊飞亲鸟可能导致弃巢。</p><p>给它们留一点野性空间。窗台、树洞、灌木丛、少修剪的绿地，比精致整齐的景观更有价值。</p><p>最后一点也许最重要：不要把&quot;不怕人&quot;当成亲近。那是一种适应，不是信任。</p></div>
+      </details>
+    </article>
+    
+    <article class="card" data-search="一碗米饭要经过多少步 从稻田到餐桌，一碗米饭的旅程比多数人想的要长。
+
+先是育秧。稻种要在温水里泡上一两天，等它微微露白，再均匀撒进苗床,盖上薄膜保温。大约一个月后，秧苗长到十几厘米，就可以移栽了。
+
+插秧是个弯着腰的活。传统人工插秧，一个人一天大约能完成一亩地，株距行距全靠手感。现在很多地方改用抛秧或机插，效率提高了几十倍。
+
+接下来是漫长的田间管理：灌水、晒田、追肥、除草，还要盯着稻飞虱和纹枯病。水稻生长周期通常在一百二十天到一百五十天之间，这段时间里，天气决定了收成的大半。
+
+秋天，稻穗低头。收割机开进田里，一边割一边脱粒，稻谷被装进袋子运回晒场。含水率降到安全线以下，才能进仓，否则容易霉变。
+
+最后是加工。稻谷脱去颖壳成为糙米，再经碾磨去掉部分皮层，才变成我们熟悉的白色米粒。这一步决定了米的等级，也带走了相当一部分维生素和膳食纤维。
+
+一碗饭的背后，是育种、水利、农机、气象和无数双手。下次端起碗的时候，或许可以多看一眼。 一碗 一边 大约 插秧 稻谷" aria-labelledby="card-title-3">
+      <div class="card-top">
+        <span class="card-no">03</span>
+        <span class="word-count">397 字</span>
+      </div>
+      <h2 class="card-title" id="card-title-3">一碗米饭要经过多少步</h2>
+      <p class="filename">03_一碗米饭的旅程.txt</p>
+
+      <div class="section-head">
+        <span>关键词</span><span class="section-note">TF-IDF TOP 5</span>
+      </div>
+      <div class="tags"><button type="button" class="tag tag-0" data-keyword="一碗" title="TF-IDF 权重 0.185；点击屏蔽包含“一碗”的文章" aria-label="屏蔽包含 一碗 的文章">一碗</button><button type="button" class="tag tag-1" data-keyword="一边" title="TF-IDF 权重 0.149；点击屏蔽包含“一边”的文章" aria-label="屏蔽包含 一边 的文章">一边</button><button type="button" class="tag tag-2" data-keyword="大约" title="TF-IDF 权重 0.149；点击屏蔽包含“大约”的文章" aria-label="屏蔽包含 大约 的文章">大约</button><button type="button" class="tag tag-3" data-keyword="插秧" title="TF-IDF 权重 0.149；点击屏蔽包含“插秧”的文章" aria-label="屏蔽包含 插秧 的文章">插秧</button><button type="button" class="tag tag-4" data-keyword="稻谷" title="TF-IDF 权重 0.149；点击屏蔽包含“稻谷”的文章" aria-label="屏蔽包含 稻谷 的文章">稻谷</button></div>
+
+      <div class="section-head">
+        <span>核心句</span><span class="section-note">抽取式 · 原文</span>
+      </div>
+      <div class="core-list"><div class="core-item"><span class="core-index">01</span><p class="core-text"><mark>水稻生长周期通常在一百二十天到一百五十天之间，这段时间里，天气决定了收成的大半。</mark></p></div><div class="core-item"><span class="core-index">02</span><p class="core-text"><mark>稻谷脱去颖壳成为糙米，再经碾磨去掉部分皮层，才变成我们熟悉的白色米粒。</mark></p></div></div>
+
+      <details class="fulltext">
+        <summary>查看全文</summary>
+        <div class="fulltext-body"><p>从稻田到餐桌，一碗米饭的旅程比多数人想的要长。</p><p>先是育秧。稻种要在温水里泡上一两天，等它微微露白，再均匀撒进苗床,盖上薄膜保温。大约一个月后，秧苗长到十几厘米，就可以移栽了。</p><p>插秧是个弯着腰的活。传统人工插秧，一个人一天大约能完成一亩地，株距行距全靠手感。现在很多地方改用抛秧或机插，效率提高了几十倍。</p><p>接下来是漫长的田间管理：灌水、晒田、追肥、除草，还要盯着稻飞虱和纹枯病。水稻生长周期通常在一百二十天到一百五十天之间，这段时间里，天气决定了收成的大半。</p><p>秋天，稻穗低头。收割机开进田里，一边割一边脱粒，稻谷被装进袋子运回晒场。含水率降到安全线以下，才能进仓，否则容易霉变。</p><p>最后是加工。稻谷脱去颖壳成为糙米，再经碾磨去掉部分皮层，才变成我们熟悉的白色米粒。这一步决定了米的等级，也带走了相当一部分维生素和膳食纤维。</p><p>一碗饭的背后，是育种、水利、农机、气象和无数双手。下次端起碗的时候，或许可以多看一眼。</p></div>
+      </details>
+    </article>
+    
+    <article class="card" data-search="睡眠、记忆与遗忘：一个仍在争论的问题 一、睡眠并不&quot;闲着&quot;
+
+如果把睡眠看成大脑的关机状态，就很难解释一个现象：睡眠期间，大脑的能量消耗只比清醒时低百分之十左右。它显然还在做别的事。
+
+目前被讨论得最多的假设是&quot;记忆的整理&quot;。白天经历的事情先被临时存放在海马体里，睡眠期间，这些片段会被反复&quot;重放&quot;，并逐渐转移到大脑皮层，形成更稳定的长期记忆。这个过程在深度睡眠阶段尤其明显，而快速眼动睡眠阶段则更多与情绪和创造性联想相关。
+
+二、实验支持了什么
+
+支持这一假设的证据主要来自几类实验。
+
+一类是&quot;睡眠剥夺&quot;实验。学习新内容之后被剥夺睡眠的受试者，第二天的回忆成绩明显低于正常睡眠组。而且被剥夺的如果是学习后的第一晚，影响比之后几晚更大——这暗示存在一个关键的时间窗口。
+
+另一类是&quot;线索提示&quot;实验。让受试者学习成对的词，然后在睡眠中播放其中一部分词的声音线索，醒来后这部分配对的记忆成绩更好。这说明睡眠中的大脑并非完全对外界关闭。
+
+还有一类是脑成像研究。睡眠期间，海马体与皮层之间的活动同步性增强，这种&quot;对话&quot;被认为是记忆巩固的生理基础。
+
+三、遗忘也没有错
+
+但另一条研究线索提醒我们，睡眠不只服务于&quot;记住&quot;，也服务于&quot;忘掉&quot;。
+
+有些实验显示，睡眠会优先保留与情绪显著性或未来用途相关的记忆，而削弱无关的细节。也就是说，睡眠像在做一次整理：把重要的归档，把不重要的清掉。如果这个功能缺失，大脑可能会被琐碎信息淹没。
+
+这解释了一个日常体验：睡一觉之后，细节模糊了，但&quot;这件事大概是怎么回事&quot;反而更清楚了。
+
+四、争论在哪里
+
+第一个争论是因果方向。是睡眠促进了记忆巩固，还是&quot;需要被记住的内容&quot;反过来增加了睡眠需求？两者可能同时成立，但实验设计很难彻底分开。
+
+第二个争论是阶段划分。把睡眠简单分成&quot;深度睡眠管记忆、快速眼动管情绪&quot;过于整齐。不同研究给出的结论并不完全一致，尤其是关于快速眼动睡眠的作用，争议相当大。
+
+第三个争论是可推广性。很多精细实验是在严格控制的环境下、用特定任务（多为陈述性记忆）完成的。能否推广到复杂技能、语言学习和真实生活场景，还需要更多证据。
+
+五、对普通人的意义
+
+在结论尚未统一的情况下，能给出的建议反而是最朴素的几条：
+
+睡眠不足对认知的影响是确定的。无论机制如何，长期睡眠不足者的注意力、情绪调节和记忆表现都更差，这一点争议很小。
+
+学习之后的那一晚比较重要。如果可能，尽量不要在刚学完新东西的当晚熬夜。
+
+规律比时长更容易被忽视。固定的入睡和起床时间，对睡眠质量的帮助往往大于周末补觉。
+
+不必迷信&quot;睡满八小时&quot;。个体差异很大，更重要的是白天是否清醒、情绪是否稳定。
+
+六、结语
+
+关于睡眠与记忆，我们目前大概处在一个&quot;知道它重要，但说不清具体怎么重要&quot;的阶段。这本身是有意思的：一个每天都在发生、每个人都经历过的过程，至今仍然没有完整的解释。
+
+也许这正说明，大脑在休息时做的事，和它在工作时做的事一样复杂。 睡眠 记忆 大脑 情绪 阶段" aria-labelledby="card-title-4">
+      <div class="card-top">
+        <span class="card-no">04</span>
+        <span class="word-count">1162 字</span>
+      </div>
+      <h2 class="card-title" id="card-title-4">睡眠、记忆与遗忘：一个仍在争论的问题</h2>
+      <p class="filename">04_睡眠与记忆.txt</p>
+
+      <div class="section-head">
+        <span>关键词</span><span class="section-note">TF-IDF TOP 5</span>
+      </div>
+      <div class="tags"><button type="button" class="tag tag-0" data-keyword="睡眠" title="TF-IDF 权重 0.228；点击屏蔽包含“睡眠”的文章" aria-label="屏蔽包含 睡眠 的文章">睡眠</button><button type="button" class="tag tag-1" data-keyword="记忆" title="TF-IDF 权重 0.151；点击屏蔽包含“记忆”的文章" aria-label="屏蔽包含 记忆 的文章">记忆</button><button type="button" class="tag tag-2" data-keyword="大脑" title="TF-IDF 权重 0.144；点击屏蔽包含“大脑”的文章" aria-label="屏蔽包含 大脑 的文章">大脑</button><button type="button" class="tag tag-3" data-keyword="情绪" title="TF-IDF 权重 0.144；点击屏蔽包含“情绪”的文章" aria-label="屏蔽包含 情绪 的文章">情绪</button><button type="button" class="tag tag-4" data-keyword="阶段" title="TF-IDF 权重 0.131；点击屏蔽包含“阶段”的文章" aria-label="屏蔽包含 阶段 的文章">阶段</button></div>
+
+      <div class="section-head">
+        <span>核心句</span><span class="section-note">抽取式 · 原文</span>
+      </div>
+      <div class="core-list"><div class="core-item"><span class="core-index">01</span><p class="core-text"><mark>白天经历的事情先被临时存放在海马体里，睡眠期间，这些片段会被反复&quot;重放&quot;，并逐渐转移到大脑皮层，形成更稳定的长期记忆。</mark></p></div><div class="core-item"><span class="core-index">02</span><p class="core-text"><mark>让受试者学习成对的词，然后在睡眠中播放其中一部分词的声音线索，醒来后这部分配对的记忆成绩更好。</mark></p></div></div>
+
+      <details class="fulltext">
+        <summary>查看全文</summary>
+        <div class="fulltext-body"><p>一、睡眠并不&quot;闲着&quot;</p><p>如果把睡眠看成大脑的关机状态，就很难解释一个现象：睡眠期间，大脑的能量消耗只比清醒时低百分之十左右。它显然还在做别的事。</p><p>目前被讨论得最多的假设是&quot;记忆的整理&quot;。白天经历的事情先被临时存放在海马体里，睡眠期间，这些片段会被反复&quot;重放&quot;，并逐渐转移到大脑皮层，形成更稳定的长期记忆。这个过程在深度睡眠阶段尤其明显，而快速眼动睡眠阶段则更多与情绪和创造性联想相关。</p><p>二、实验支持了什么</p><p>支持这一假设的证据主要来自几类实验。</p><p>一类是&quot;睡眠剥夺&quot;实验。学习新内容之后被剥夺睡眠的受试者，第二天的回忆成绩明显低于正常睡眠组。而且被剥夺的如果是学习后的第一晚，影响比之后几晚更大——这暗示存在一个关键的时间窗口。</p><p>另一类是&quot;线索提示&quot;实验。让受试者学习成对的词，然后在睡眠中播放其中一部分词的声音线索，醒来后这部分配对的记忆成绩更好。这说明睡眠中的大脑并非完全对外界关闭。</p><p>还有一类是脑成像研究。睡眠期间，海马体与皮层之间的活动同步性增强，这种&quot;对话&quot;被认为是记忆巩固的生理基础。</p><p>三、遗忘也没有错</p><p>但另一条研究线索提醒我们，睡眠不只服务于&quot;记住&quot;，也服务于&quot;忘掉&quot;。</p><p>有些实验显示，睡眠会优先保留与情绪显著性或未来用途相关的记忆，而削弱无关的细节。也就是说，睡眠像在做一次整理：把重要的归档，把不重要的清掉。如果这个功能缺失，大脑可能会被琐碎信息淹没。</p><p>这解释了一个日常体验：睡一觉之后，细节模糊了，但&quot;这件事大概是怎么回事&quot;反而更清楚了。</p><p>四、争论在哪里</p><p>第一个争论是因果方向。是睡眠促进了记忆巩固，还是&quot;需要被记住的内容&quot;反过来增加了睡眠需求？两者可能同时成立，但实验设计很难彻底分开。</p><p>第二个争论是阶段划分。把睡眠简单分成&quot;深度睡眠管记忆、快速眼动管情绪&quot;过于整齐。不同研究给出的结论并不完全一致，尤其是关于快速眼动睡眠的作用，争议相当大。</p><p>第三个争论是可推广性。很多精细实验是在严格控制的环境下、用特定任务（多为陈述性记忆）完成的。能否推广到复杂技能、语言学习和真实生活场景，还需要更多证据。</p><p>五、对普通人的意义</p><p>在结论尚未统一的情况下，能给出的建议反而是最朴素的几条：</p><p>睡眠不足对认知的影响是确定的。无论机制如何，长期睡眠不足者的注意力、情绪调节和记忆表现都更差，这一点争议很小。</p><p>学习之后的那一晚比较重要。如果可能，尽量不要在刚学完新东西的当晚熬夜。</p><p>规律比时长更容易被忽视。固定的入睡和起床时间，对睡眠质量的帮助往往大于周末补觉。</p><p>不必迷信&quot;睡满八小时&quot;。个体差异很大，更重要的是白天是否清醒、情绪是否稳定。</p><p>六、结语</p><p>关于睡眠与记忆，我们目前大概处在一个&quot;知道它重要，但说不清具体怎么重要&quot;的阶段。这本身是有意思的：一个每天都在发生、每个人都经历过的过程，至今仍然没有完整的解释。</p><p>也许这正说明，大脑在休息时做的事，和它在工作时做的事一样复杂。</p></div>
+      </details>
+    </article>
+    
+    <article class="card" data-search="注意力为什么变成了商品 一、稀缺的东西换了
+
+工业时代最稀缺的是产能，信息时代最稀缺的是注意力。这个说法被重复得太多，以至于容易忽略它真正的含义：注意力不仅是稀缺的，而且是有限的、不可储存的、无法转赠的。
+
+一个人一天只有十几个小时的清醒时间，能真正投入的深度注意力更少。所有以&quot;争夺用户时间&quot;为商业模式的产品，本质上都在同一个池子里取水。这不是竞争，这是零和。
+
+二、注意力如何被定价
+
+一旦注意力可以被打包、测量和交换，它就会获得价格。
+
+最早的定价方式是曝光：一块广告牌、一页报纸版面、一个电视时段。价格取决于有多少人可能看到。这套逻辑的问题在于，&quot;可能看到&quot;和&quot;真的看到了&quot;之间差距很大。
+
+互联网把这个问题部分解决了。点击、停留时长、完播率、滚动深度，这些指标让&quot;注意力&quot;变得可以计量，也让它变得可以优化。于是广告从&quot;买位置&quot;变成了&quot;买行为&quot;。
+
+再往后，推荐系统把定价推进到了个体级别：同样一条内容，对不同的人价值不同，因此可以有不同的价格。注意力的市场从批发变成了零售。
+
+三、优化目标决定了内容形态
+
+这是最容易被忽视的一环：当你用某个指标去优化内容，内容就会朝着那个指标变形。
+
+如果指标是点击率，标题会变长、变夸张，封面会用高饱和度的颜色。如果指标是停留时长，视频的前三秒会被压缩成&quot;钩子&quot;，结尾会被拉长。如果指标是互动数，内容会倾向于制造分歧，因为争议比共识更能引发评论。
+
+这些变化不是创作者道德滑坡的结果，而是优化目标的结构性后果。即使每个参与者都理性，整体仍会滑向同一个方向。
+
+四、代价转移到了哪里
+
+注意力经济的成本并没有消失，它只是被转移了。
+
+一部分转移给了用户：碎片化的阅读习惯、被不断打断的专注、以及&quot;看了两小时却记不住什么&quot;的空虚感。持续的多任务切换会提高认知负荷，这一点在实验研究中有比较一致的证据。
+
+一部分转移给了内容生产者：为了维持曝光频率，更新节奏被不断压缩，深度内容的生产周期与平台的算法周期越来越不匹配。
+
+还有一部分转移给了公共讨论：当注意力成为度量单位，容易被传播的内容与实际重要的内容之间的差距会扩大。复杂议题需要耐心，而耐心恰恰是这套系统最不奖励的东西。
+
+五、个人能做的选择
+
+个人层面的应对，通常不是&quot;戒断&quot;，而是重新分配。
+
+设定&quot;无输入时段&quot;。哪怕每天只有一小时不看任何屏幕，专注力的恢复也比想象中明显。
+
+区分&quot;我想看&quot;和&quot;它想让我看&quot;。这个区分听起来简单，但只要在打开应用之前问一句&quot;我这次要做什么&quot;，就已经打断了自动化的滑动。
+
+接受错过。信息焦虑的根源是&quot;怕漏掉重要的事&quot;，但绝大多数被推送的内容在二十四小时后就没有价值。允许自己不知道某些热点，是一种可以被训练的能力。
+
+六、结语
+
+注意力经济的核心矛盾在于：它高效地满足了即时的需求，同时系统性地削弱了产生长期价值所需的条件。
+
+作为个体，我们无法改变这套系统的激励结构，但可以决定自己在其中停留多久。时间花在哪里，注意力就在哪里；注意力在哪里，你就在哪里。 注意力 指标 优化 小时 内容" aria-labelledby="card-title-5">
+      <div class="card-top">
+        <span class="card-no">05</span>
+        <span class="word-count">1186 字</span>
+      </div>
+      <h2 class="card-title" id="card-title-5">注意力为什么变成了商品</h2>
+      <p class="filename">05_注意力经济.txt</p>
+
+      <div class="section-head">
+        <span>关键词</span><span class="section-note">TF-IDF TOP 5</span>
+      </div>
+      <div class="tags"><button type="button" class="tag tag-0" data-keyword="注意力" title="TF-IDF 权重 0.158；点击屏蔽包含“注意力”的文章" aria-label="屏蔽包含 注意力 的文章">注意力</button><button type="button" class="tag tag-1" data-keyword="指标" title="TF-IDF 权重 0.153；点击屏蔽包含“指标”的文章" aria-label="屏蔽包含 指标 的文章">指标</button><button type="button" class="tag tag-2" data-keyword="优化" title="TF-IDF 权重 0.131；点击屏蔽包含“优化”的文章" aria-label="屏蔽包含 优化 的文章">优化</button><button type="button" class="tag tag-3" data-keyword="小时" title="TF-IDF 权重 0.131；点击屏蔽包含“小时”的文章" aria-label="屏蔽包含 小时 的文章">小时</button><button type="button" class="tag tag-4" data-keyword="内容" title="TF-IDF 权重 0.121；点击屏蔽包含“内容”的文章" aria-label="屏蔽包含 内容 的文章">内容</button></div>
+
+      <div class="section-head">
+        <span>核心句</span><span class="section-note">抽取式 · 原文</span>
+      </div>
+      <div class="core-list"><div class="core-item"><span class="core-index">01</span><p class="core-text"><mark>一部分转移给了内容生产者：为了维持曝光频率，更新节奏被不断压缩，深度内容的生产周期与平台的算法周期越来越不匹配。</mark></p></div><div class="core-item"><span class="core-index">02</span><p class="core-text"><mark>还有一部分转移给了公共讨论：当注意力成为度量单位，容易被传播的内容与实际重要的内容之间的差距会扩大。</mark></p></div></div>
+
+      <details class="fulltext">
+        <summary>查看全文</summary>
+        <div class="fulltext-body"><p>一、稀缺的东西换了</p><p>工业时代最稀缺的是产能，信息时代最稀缺的是注意力。这个说法被重复得太多，以至于容易忽略它真正的含义：注意力不仅是稀缺的，而且是有限的、不可储存的、无法转赠的。</p><p>一个人一天只有十几个小时的清醒时间，能真正投入的深度注意力更少。所有以&quot;争夺用户时间&quot;为商业模式的产品，本质上都在同一个池子里取水。这不是竞争，这是零和。</p><p>二、注意力如何被定价</p><p>一旦注意力可以被打包、测量和交换，它就会获得价格。</p><p>最早的定价方式是曝光：一块广告牌、一页报纸版面、一个电视时段。价格取决于有多少人可能看到。这套逻辑的问题在于，&quot;可能看到&quot;和&quot;真的看到了&quot;之间差距很大。</p><p>互联网把这个问题部分解决了。点击、停留时长、完播率、滚动深度，这些指标让&quot;注意力&quot;变得可以计量，也让它变得可以优化。于是广告从&quot;买位置&quot;变成了&quot;买行为&quot;。</p><p>再往后，推荐系统把定价推进到了个体级别：同样一条内容，对不同的人价值不同，因此可以有不同的价格。注意力的市场从批发变成了零售。</p><p>三、优化目标决定了内容形态</p><p>这是最容易被忽视的一环：当你用某个指标去优化内容，内容就会朝着那个指标变形。</p><p>如果指标是点击率，标题会变长、变夸张，封面会用高饱和度的颜色。如果指标是停留时长，视频的前三秒会被压缩成&quot;钩子&quot;，结尾会被拉长。如果指标是互动数，内容会倾向于制造分歧，因为争议比共识更能引发评论。</p><p>这些变化不是创作者道德滑坡的结果，而是优化目标的结构性后果。即使每个参与者都理性，整体仍会滑向同一个方向。</p><p>四、代价转移到了哪里</p><p>注意力经济的成本并没有消失，它只是被转移了。</p><p>一部分转移给了用户：碎片化的阅读习惯、被不断打断的专注、以及&quot;看了两小时却记不住什么&quot;的空虚感。持续的多任务切换会提高认知负荷，这一点在实验研究中有比较一致的证据。</p><p>一部分转移给了内容生产者：为了维持曝光频率，更新节奏被不断压缩，深度内容的生产周期与平台的算法周期越来越不匹配。</p><p>还有一部分转移给了公共讨论：当注意力成为度量单位，容易被传播的内容与实际重要的内容之间的差距会扩大。复杂议题需要耐心，而耐心恰恰是这套系统最不奖励的东西。</p><p>五、个人能做的选择</p><p>个人层面的应对，通常不是&quot;戒断&quot;，而是重新分配。</p><p>设定&quot;无输入时段&quot;。哪怕每天只有一小时不看任何屏幕，专注力的恢复也比想象中明显。</p><p>区分&quot;我想看&quot;和&quot;它想让我看&quot;。这个区分听起来简单，但只要在打开应用之前问一句&quot;我这次要做什么&quot;，就已经打断了自动化的滑动。</p><p>接受错过。信息焦虑的根源是&quot;怕漏掉重要的事&quot;，但绝大多数被推送的内容在二十四小时后就没有价值。允许自己不知道某些热点，是一种可以被训练的能力。</p><p>六、结语</p><p>注意力经济的核心矛盾在于：它高效地满足了即时的需求，同时系统性地削弱了产生长期价值所需的条件。</p><p>作为个体，我们无法改变这套系统的激励结构，但可以决定自己在其中停留多久。时间花在哪里，注意力就在哪里；注意力在哪里，你就在哪里。</p></div>
+      </details>
+    </article>
+    
+    </main>
+
+    <section id="empty" class="empty" hidden>
+      <div class="empty-icon">⌕</div>
+      <h2>没有匹配的文章</h2>
+      <p>换个关键词试试，或点击“恢复全部”回到初始状态。</p>
+    </section>
+
+    <footer class="footer">
+      <span>本报告由 text_tool.py 生成 · jieba + scikit-learn TF-IDF</span>
+      <span>单文件离线报告 · 无外部资源</span>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".card"));
+  var searchInput = document.getElementById("search");
+  var clearButton = document.getElementById("clearSearch");
+  var restoreButton = document.getElementById("restoreAll");
+  var status = document.getElementById("status");
+  var blockedBar = document.getElementById("blockedBar");
+  var blockedList = document.getElementById("blockedList");
+  var emptyState = document.getElementById("empty");
+  var grid = document.getElementById("grid");
+
+  // 键为小写词，值为展示用原词；用 Map 避免大小写重复。
+  var blocked = new Map();
+
+  function normalize(value) {
+    return String(value || "").toLocaleLowerCase("zh-CN").trim();
+  }
+
+  function articleContains(card, term) {
+    return normalize(card.dataset.search).indexOf(normalize(term)) !== -1;
+  }
+
+  function makeBlockedChip(key, term) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "blocked-chip";
+    button.textContent = term + " ×";
+    button.title = "解除屏蔽：" + term;
+    button.setAttribute("aria-label", "解除屏蔽：" + term);
+    button.addEventListener("click", function () {
+      blocked.delete(key);
+      render();
+    });
+    return button;
+  }
+
+  function render() {
+    var query = normalize(searchInput.value);
+    var blockedEntries = Array.from(blocked.entries());
+    var visible = 0;
+
+    cards.forEach(function (card) {
+      var queryOK = !query || normalize(card.dataset.search).indexOf(query) !== -1;
+      var blockedOK = !blockedEntries.some(function (entry) {
+        return articleContains(card, entry[1]);
+      });
+      var show = queryOK && blockedOK;
+      card.hidden = !show;
+      if (show) visible += 1;
+    });
+
+    var statusParts = ["显示 " + visible + " / " + cards.length + " 篇"];
+    if (query) statusParts.push("搜索“" + searchInput.value.trim() + "”");
+    if (blocked.size) statusParts.push("屏蔽 " + blocked.size + " 个词");
+    status.textContent = statusParts.join(" · ");
+
+    clearButton.hidden = !query;
+    emptyState.hidden = visible !== 0;
+    blockedBar.hidden = blocked.size === 0;
+    restoreButton.disabled = !query && blocked.size === 0;
+
+    blockedList.textContent = "";
+    blockedEntries.forEach(function (entry) {
+      blockedList.appendChild(makeBlockedChip(entry[0], entry[1]));
+    });
+  }
+
+  // 点击任意关键词标签：屏蔽包含该词的全部文章。
+  grid.addEventListener("click", function (event) {
+    var tag = event.target.closest(".tag");
+    if (!tag) return;
+    var term = tag.getAttribute("data-keyword");
+    if (!term) return;
+    blocked.set(normalize(term), term);
+    render();
+  });
+
+  searchInput.addEventListener("input", render);
+  searchInput.addEventListener("search", render);
+  searchInput.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      searchInput.value = "";
+      render();
+    }
+  });
+
+  clearButton.addEventListener("click", function () {
+    searchInput.value = "";
+    render();
+    searchInput.focus();
+  });
+
+  // 恢复全部：清空搜索词与所有关键词屏蔽，但不改变构建时的 --include/--exclude。
+  restoreButton.addEventListener("click", function () {
+    searchInput.value = "";
+    blocked.clear();
+    render();
+    searchInput.focus();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
