@@ -822,10 +822,20 @@
     return file.name + "::" + file.size + "::" + file.lastModified;
   }
 
+  // 把累计队列重新写回 input.files，确保表单提交的是全部文件。
+  function syncInputFiles() {
+    var transfer = new DataTransfer();
+    selectedFiles.forEach(function (file) {
+      transfer.items.add(file);
+    });
+    input.files = transfer.files;
+  }
+
   function removeFile(key) {
     selectedFiles = selectedFiles.filter(function (file) {
       return fileKey(file) !== key;
     });
+    syncInputFiles();
     renderSelection();
   }
 

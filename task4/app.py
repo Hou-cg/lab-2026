@@ -49,6 +49,9 @@ INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024  # 单次上传最多 80 MB
+# 模板文件修改后自动重新加载，避免服务继续使用旧页面。
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 
 
 def ensure_storage() -> None:
